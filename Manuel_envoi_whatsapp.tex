@@ -1,0 +1,55 @@
+\documentclass[10pt]{article}
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2cm]{geometry}
+\usepackage{hyperref}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{IFNTI Sokodé}
+\rhead{Script envoi de messages Whatsapp}
+\cfoot{Institut de Formation aux Normes et Technologies de l'Informatique\\300 BP 40, Sokodé TOGO -- Tél. : +228 90 91 81 41}
+\rfoot{\thepage}
+
+\title{Script envoi de messages Whatsapp}
+\author{Jean-Christophe Carré}
+\date{5 août 2021}
+
+\begin{document}
+
+\maketitle
+Ce document à pour objectif de décrire l'utilisation du script python permettant d'envoer des messages Whatsapp par vague, notamment pour les campagnes de recrutement.\\
+
+
+
+\section{Préparation de la liste de contacts}
+Il est nécessaire de créer un fichier nommé liste\_etudiants\_interesses.csv\\
+Il doit être placé dans le dossier Documentations\_outils/envoi\_whatsapp\_supbot/\\
+Ce fichier doit utiliser des virgules comme séparateurs, et contenir les données dans l'ordre suivant : numéro de candidat, ville, nom du lycée, nom, prénom, indicatif pays, numéro de téléphone 1, numéro de téléphone 2, sexe, année.\\
+
+Avoir deux numéro de téléphone permet d'augmenter les chances d'en avoir au moins un qui soit associé à un compte Whatsapp. Le script essaie d'envoyer au deux. Avec un peu de chances, le jeune aura donné le numéro d'un parent en plus du sien. Dans le cas où aucun compte Whatsapp n'est associé, ce contact sera simplement passé. un fichier log permet de connaître à la fin le nombre d'envoi réussis. Il est conseillé de vider le fichier de log avant chaque session d'envoi, afin de faciliter la lecture.
+
+\section{Configuration du téléphone}
+Il faut que tous les contacts soient enregistrés dans la mémoire de votre téléphone pour qu'ils puissent être trouvés. Pour cela, un script python nommé conversion\_vcf.py permet de générer un fichier de type vcf. Il utilise en entrée le fichier liste\_etudiants\_interesses.csv\\
+Copier le fichier vcf sur le téléphone puis utiliser l'outil d'importation de contacts. Votre téléphone doit être connecté pour rechercher chaque contact sur Whatsapp. Cette procédure peut prendre uelques minutes, surtout s'il y a plusieurs centaines de contacts.
+
+\section{Configuration de l'ordinateur}
+Ce script a été fait en prenant en compte le tutoriel accessible à l'adresse suivante : \url{https://python.plainenglish.io/whatsapp-bot-for-auto-replying-sending-images-via-python-and-selenium-78358e4df0}\\
+Commencez par suivre les instructions qui y figurent, pour configurer un environnement de développement, ainsi que jupyter notebook.\\
+
+J'ai pour ma part nommé ma variable d'environment whatsapp\_env. Ouvrir un terminal dans Documentations\_outils/envoi\_whatsapp\_supbot/selenium\_chrome/environment puis taper \texttt{source whatsapp\_env/bin/activate}. Une fois fait, lancez le serveur jupiter notebook, en tapant simplement \texttt{jupyter notebook}.\\
+
+Votre navigateur par défaut va automatiquement ouvrir un onglet, et vous serez redirigés vers une page listant les fichiers présents dans le dossier. C'est le fichier envoi\_whatsapp.ipynb qui contient le script python. Cliquer dessus pour l'ouvrir.\\
+
+Jupyter propose la définition de blocs de code qui peuvent être exécutés indépendamment. Pour eécuter un bloc, le sélectionnr, puis Ctrl+Enter. \\
+Le premier bloc correspond aux imports. Le deuxième ouvre une fenêtre chrome et y ouvre un onglet whatsapp web. Ici, vous devez scanner le QR code avec un téléphone. C'est au nom de ce téléphone que seront envoyé les messages.\\
+Ces deux premiers blocs ont été séparés du bloc contenant le code principal afin de faciliter le développement et le débogage. En effet, la procédure de connexion d'un téléphone est souvent longue. Ainsi, on pourra exécuter le bloc contenant la partie utile du code sans avoir à réitérer la procédure de connexion à chaque fois.\\
+
+
+\section{Définition du message}
+Le contenu texte du message doit être défini dans la fonction generer\_message. Actuellement, Le contenu du message diffère, en fonction de l'année (Les candidats ayant donné leurs contacts l'année dernière sont à priori parti dans les études supérieurs).\\
+
+Pour joindre une photo ou une vidéo, définir le chemin d'accès à ce fichier (sur votre ordinateur, pas sur le téléphone) dans la variable piece\_jointe.
+
+
+\end{document}

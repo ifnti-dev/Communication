@@ -1,0 +1,438 @@
+#Recherche le chemin passé en arument et le renvoie
+#Si rien n'est trouvé avant le timeout, une exception est levée.
+def chercher_element(chemin: str, timeout: int):
+    trouve = False
+    temps = 0
+    while(not trouve):
+        try: 
+            element = chrome.find_element_by_xpath(chemin)
+            trouve = True
+        except: 
+            time.sleep(0.5)
+            temps += 0.5
+        if(temps > timeout):
+            raise Exception("Élément non trouvé pour le chemin : " + chemin) 
+    return element
+
+#Recherche tous les chemins passés en arument et renvoie le premier élément trrouvé, ainsi que l'index du chemin auquel il correspond.
+#Si rien n'est trouvé avant le timeout, une exception est levée.
+#On n'utilise pas la fonction chercher_element afin de faire toutes les recherches en parallèle pour ne pas attendre les timeout à chaque fois.
+def chercher_elements(chemins, timeout: int):
+    trouve = False
+    temps = 0
+    element = None
+    index = -1
+    while(temps < timeout):
+        for i in range(len(chemins)):
+            try: 
+                index = i
+                print("tentative de trouver : " + chemins[i])
+                element = chrome.find_element_by_xpath(chemins[i])
+                print("succès !  élément : '" + str(element) + "' à l'index " + str(index))
+                trouve = True
+                return (element, index)
+            except: 
+                print("échec")
+                time.sleep(0.1)
+                temps += 0.1
+    raise Exception("Élément non trouvé pour les chemins : " + str(chemins))
+    
+
+def taper_message(tel: str, nom:str, prenom: str, message: str, num_contact: str, mots_cle_interdits = []):
+    if(not selectionner_contact(tel, nom, prenom, num_contact, mots_cle_interdits)):
+        return False
+    #taper le message dans le champ message
+    #Le caractère '\n' est interprété comme un appui sur la touche "entrer". Ce qui envoie le message. On remplace tous les \n par une combinaison Shift + Enter
+    search_box = chercher_element('//footer//div/div/div[@class="_13NKt copyable-text selectable-text"][@contenteditable="true"][@dir="ltr"][@spellcheck="true"]', 3)
+    for ligne in message.split('\n'):
+        search_box.send_keys(ligne)
+        ActionChains(chrome).key_down(Keys.SHIFT).key_down(Keys.ENTER).key_up(Keys.SHIFT).key_up(Keys.ENTER).perform()
+    return True
+    
+
+#Envoie un message au numéro de téléphone passé en argument, si celui ci est trouvé.
+#La chaine de la PJ doit être un chemin absolu vers un fichier présent en local sur l'ordinateur.
+#Pour ne pas mettre de PJ, simplement passer une chaine vide, ou bien ne pas préciser cet argument.
+#mots_cle_interdits est un tableau de chaines de caractère. S'il n'est pas vide, le message ne sera envoyé que si la conversation sélectionnée ne contient aucun des mots clé interdits. (permet d'éviter les messages en doublon, mais prend du temps)
+def envoyer_message(tel: str, nom: str, prenom: str, message: str, num_contact: str, image='', mots_cles_interdits = []):
+    global statut_envoi
+    if(not taper_message(tel, nom, prenom, message, num_contact, mots_cles_interdits)):
+        return False
+    time.sleep(0.5)
+    
+    if(image == ""):
+        bouton_envoyer = chercher_element("//button[span/@data-testid='send']", 1)
+        bouton_envoyer.click()
+    else:
+        #cliquer sur le bouton joindre
+        boutonJoindre = chercher_element("//div[@role='button'][@title='Joindre']", 1)
+        boutonJoindre.click()
+
+        #sélection du fichier à envoyer
+        input_box = chrome.find_element_by_tag_name('input')
+        input_box.send_keys(image)
+
+        #Attendre que le fichier se charge
+        bouton_envoyer = chercher_element("//div[@role='button'][span/@data-testid='send']", 35)
+        time.sleep(1)
+        bouton_envoyer.click()
+    
+    statut_envoi += "| envoyé"
+    return True
+
+
+#Recherche la chaine passée en argument dans l'historique des message du contact actuellement sélectionné.
+#Renoie vrai si au moins un message contient la chaine, faux sinon.
+def chercher_contenu_dans_discussion(contenu: str):
+    global statut_envoi
+    try:
+        bouton_chercher = chercher_element('//div[@role="button"][@title="Recherche..."]', 2)
+        bouton_chercher.click()
+    except:
+        print()
+    try:
+        champ_saisie = chercher_element('//header[//*[contains(text(),"Rechercher des messages")]]/following-sibling::*//div[@contenteditable="true"][@class="_13NKt copyable-text selectable-text"]', 3)
+        #champ_saisie = chercher_element('//header[div/div[contains(text(),"Rechercher des messages")]]/following-sibling::div/div/label/div/div[@contenteditable="true"][@class="_13NKt copyable-text selectable-text"]', 3)
+        #                                /html/body/div[1]/div[1]/div[1]/div[2]/div[3]/span/div[1]/div/div[1]/div/label/div/div[2]
+        #    //*[@id="app"]/div[1]/div[1]/div[2]/div[3]/span/div[1]/div/div[1]/div/label/div/div[2]
+        champ_saisie.clear()
+        time.sleep(0.25)
+        champ_saisie.send_keys(contenu)
+        time.sleep(0.5)
+    except Exception as e:
+        statut_envoi += " | echec de la sélection de la barre de recherche : " + str(e)
+        print(statut_envoi)
+        raise Exception("echec de la sélection de la barre de recherche : " + str(e)) 
+    
+    chemin_succes = '//header[//*[contains(text(),"Rechercher des messages")]]/following-sibling::div//span[contains(@class,"matched-text")][text()="' + contenu + '"]'
+    chemin_succes2 ='//header[//*[contains(text(),"Rechercher des messages")]]/following-sibling::div//div[@class="_3uIPm WYyr1"]/div[@class="_3m_Xw"]/div/div/div/div/div/span[@class="Hy9nV"][contains(@title, "' + contenu + '")]'
+    chemin_echec  = '//header[//*[contains(text(),"Rechercher des messages")]]/following-sibling::div[@id="pane-side"]/div/div/span[@dir="auto"][@class="i0jNr"][text()="Aucun message trouvé"]'
+
+    index = -1
+    (resultat, index) = chercher_elements([chemin_succes, chemin_succes2, chemin_echec], 10)
+    if(index == 0 or index == 1):
+        statut_envoi += " | message vraiment trouvé"
+        return True
+    elif((index == 2)):
+        statut_envoi += " | message vraiment non trouvé"
+        return False
+    else:
+        statut_envoi += " | valeur index = " + str(index) + "non acceptée dans la recherche de message"
+        return True
+    champ_saisie.clear()
+
+    #Si rien n'a été renvoyé à ce moment, c'est qu'il y a eu un problème -> Levée d'exception.
+    statut_envoi += " | échec de la recherche"
+    raise Exception("Échec de la recherche pour le contenu " + contenu) 
+
+
+    
+#Recherche, puis sélectionne le contact s'il est trouvé. S'il n'est pas trouvé, renvoie Faux
+#Si le contact est trouvé, vérifie qu'aucun des messages passés ne contient un des mot_clés interdits (pour éviter les envois en doublon)
+#Au final, ne renvoie vrai que si le contact a été correctement sélectionné et qu'il faut envoyer le message.
+def selectionner_contact(tel: str, nom: str, prenom: str, num_contact: str, mots_cles_interdits = []):
+    global statut_envoi
+    #On commence par cliquer sur le bouton pour annuler la recherche précédente
+    try:
+        bouton_annuler_recherche = chrome.find_element_by_xpath('//div[@class="_3yWey XKmj6"]//button[@class="_3GYfN"]')
+        bouton_annuler_recherche.click()
+        print("recherche annulée avec succès !")
+        time.sleep(1)
+    except Exception as e:
+        print(str(e))
+    #On recherche le champ de saisie de la recherche de contact, pour y taper le numéro de téléphone.
+    try:
+        #search_box = chrome.find_element_by_xpath('/html/body/div/div[1]/div[1]/div[3]/div/div[1]/div/label/div/div[@class="_13NKt copyable-text selectable-text"][@contenteditable="true"][@data-tab="3"][@dir="ltr"][not(@spellcheck)]')
+        #search_box = chrome.find_element_by_xpath('//div[@class="_16C8p"]/div[@class="_1UWac _3hKpJ"]/div[@class="_13NKt copyable-text selectable-text"][@contenteditable="true"][@data-tab="3"][@dir="ltr"][not(@spellcheck)]')
+        #search_box = chrome.find_element_by_xpath('//button[@aria-label="Rechercher ou démarrer une nouvelle discussion"]/following-sibling::div[@class="_16C8p"]/div[@class="_1UWac _3hKpJ"]/div[@class="_13NKt copyable-text selectable-text"][@contenteditable="true"][@data-tab="3"][@dir="ltr"][not(@spellcheck)][@title="Champ de recherche"][@role="textbox"]')
+        search_box = chrome.find_element_by_xpath('/html/body/div[1]/div/div/div[3]/div/div[1]/div/div/div[2]/div/div[@class="_13NKt copyable-text selectable-text"][@contenteditable="true"][@data-tab="3"][@dir="ltr"][not(@spellcheck)][@title="Champ de recherche"][@role="textbox"]')
+        search_box.clear()
+        search_box.send_keys(tel)
+    except Exception as e:
+        print(str(e))
+    time.sleep(0.5)
+    #chaine_chemin_contact = '//div[@aria-label="Résultats de la recherche."]/div[div/div/div/div/div/span/span[contains(@title,"{0}") or contains(@title,"{1}")]]'
+    #Xpath1 ne comporte pas nativement de méthode pour passer en casse majuscule. On fait ça à la main.
+    #Maintenant qu'on a tapé le numéro de téléphone dans le champ de recherche, on cherche si un titre de conversation apparaît
+    #Si le message "Aucun contact, discussion ou message trouvé" apparaît, cela signifie que cette personne n'a pas whatsapp.
+    try:
+        titre_UpCass = 'translate(@title,"abcdefghijklmnopqrstuvwxyzèéêëïîäâàüûùöô","ABCDEFGHIJKLMNOPQRSTUVWXYZÈÉÊËÏÎÄÂÀÜÛÙÖÔ")'
+        chaine_chemin_contact = '//div[@aria-label="Résultats de la recherche."]/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        chaine_chemin_contact2 = '//div[@aria-label="Résultats de la recherche."]/div/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        chaine_chemin_contact3 = '//div[@aria-label="Résultats de la recherche."]/div/div/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        chaine_chemin_contact4 = '//div[@aria-label="Résultats de la recherche."]/div/div/div/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        #chaine_chemin_contact5 = '//div[@aria-label="Résultats de la recherche."]/div/div/div/div/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        #chaine_chemin_contact6 = '//div[@aria-label="Résultats de la recherche."]/div/div/div/div/div/div[//span[contains(' + titre_UpCass + ',"{0}") or contains(' + titre_UpCass + ',"{1}")]]'
+        
+        xpath_contact_trouve = chaine_chemin_contact.format(nom.upper(), prenom.upper())
+        xpath_contact_trouve2 = chaine_chemin_contact2.format(nom.upper(), prenom.upper())
+        xpath_contact_trouve3 = chaine_chemin_contact3.format(nom.upper(), prenom.upper())
+        xpath_contact_trouve4 = chaine_chemin_contact4.format(nom.upper(), prenom.upper())
+        xpath_contact_non_trouve = '//span[@dir="auto"][@class="i0jNr"][contains(text(),"Aucun contact, discussion ou message trouvé")]'
+    except Exception as e:
+        print(str(e))
+
+    try:
+        index = -1
+        (bouton_contact, index) = chercher_elements([xpath_contact_trouve, xpath_contact_non_trouve], 3)
+        
+        if(index == 1):
+            statut_envoi += " | Contact officiellement non trouvé"
+            print("contact officiellement non trouvé")
+            return False
+        elif((index == -1)):
+            statut_envoi += "échec de la recherche du contact"
+            print("échec de la recherche du contact")
+            return False
+        try:
+            xpath_contact_trouves = [chaine_chemin_contact.format(nom.upper(), prenom.upper()),
+                                     chaine_chemin_contact2.format(nom.upper(), prenom.upper()),
+                                     chaine_chemin_contact3.format(nom.upper(), prenom.upper()),
+                                     chaine_chemin_contact4.format(nom.upper(), prenom.upper())]
+            #xpath_contact_trouve2 = chaine_chemin_contact2.format(nom.upper(), prenom.upper())
+            #xpath_contact_trouve3 = chaine_chemin_contact3.format(nom.upper(), prenom.upper())
+            #xpath_contact_trouve4 = chaine_chemin_contact4.format(nom.upper(), prenom.upper())
+            bouton_contacts = [chercher_element(xpath_contact_trouve, 1),
+                              chercher_element(xpath_contact_trouve2, 1),
+                              chercher_element(xpath_contact_trouve3, 1),
+                              chercher_element(xpath_contact_trouve4, 1)]
+            #bouton_contact2 = chercher_element(xpath_contact_trouve2, 1)
+            #bouton_contact3 = chercher_element(xpath_contact_trouve3, 1)
+            #bouton_contact4 = chercher_element(xpath_contact_trouve4, 1)
+
+        except Exception as e:
+            print("erreur lors de la recherche des boutons alternatifs : " + str(e))
+
+        #Il semble que l'élément cliquable ne soit pas le même d'une conversation à l'autre. Je clique donc sur tout ce que je peux en espérant trouver le bon.
+        temps_max = 3
+        temps = 0
+        #print("avant recherche du titre")
+        #Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto']", 4).text
+        #Titre_conversation = Titre_conversation.upper().replace(" ", "").replace("-", "").replace("'", "")
+        #print("après recherche du titre")
+        #nom = nom.upper().replace(" ", "").replace("-", "").replace("'", "")
+        #prenom = prenom.upper().replace(" ", "").replace("-", "").replace("'", "")
+        #try:
+        #    trouve = (prenom in Titre_conversation) or (nom in Titre_conversation) or (tel in Titre_conversation) or (("N" + num_contact) in Titre_conversation)
+        #    print("avant le while trouvé = " + str(trouve))
+        #    #print("temps < temps_max" + str(temps < temps_max))
+        #    #print("condition complète : " + str((not(trouve)) and (temps < temps_max)))
+        #except Exception as e:
+        #        print(str(e))
+         
+        trouve = False
+        while(not(trouve) and (temps < temps_max)):
+            print("dans le while recherche de la conversation")
+            for num_bouton in range(len(bouton_contacts)):
+                try:
+                    bouton_contacts[num_bouton].click()
+                    time.sleep(0.5)
+                    Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto']", 4).text
+                    Titre_conversation = Titre_conversation.upper().replace(" ", "").replace("-", "").replace("'", "")
+                    trouve = (prenom in Titre_conversation) or (nom in Titre_conversation) or (tel in Titre_conversation) or (("N" + num_contact) in Titre_conversation)
+                    temps = temps + 0.5  
+                    if(trouve):
+                        break #On sort de la boucle for et le while va sortir en même temps.
+                except Exception as e:
+                    print(str(e))
+                
+            
+            
+            
+            
+            
+            """try:
+                bouton_contact.click()
+            except Exception as e:
+                print(str(e))
+            time.sleep(0.5)
+            try:
+                bouton_contact2.click()
+            except Exception as e:
+                print(str(e))
+            time.sleep(0.5)
+            try:
+                bouton_contact3.click()
+            except Exception as e:
+                print(str(e))
+            time.sleep(0.5)
+            try:
+                bouton_contact4.click()
+            except Exception as e:
+                print(str(e))
+            time.sleep(0.5)"""
+            
+            """try:
+                bouton_contact5.click()
+            except Exception as e:
+                print(str(e))
+            time.sleep(0.5)
+            try:
+                bouton_contact6.click()
+            except Exception as e:
+                print(str(e))"""
+            #temps = temps + 0.5
+            #Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto']", 4).text
+            #Titre_conversation = Titre_conversation.upper().replace(" ", "").replace("-", "").replace("'", "")
+            #trouve = (prenom in Titre_conversation) or (nom in Titre_conversation) or (tel in Titre_conversation) or (("N" + num_contact) in Titre_conversation)
+            #while((not(trouve)) and (temps < temps_max))
+        print("après le while trouvé = " + str(trouve))
+
+        search_box.clear()
+        statut_envoi += " | contact trouvé 0"
+        
+        #Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto'][@class='_ccCW FqYAR i0jNr']", 1).text
+        #Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto'][@class='ggj6brxn gfz4du6o r7fjleex g0rxnol2 lhj4utae le5p0ye3 l7jjieqr i0jNr']", 3).text
+        Titre_conversation = chercher_element("//header/div/div/div/span[@dir='auto']", 4).text
+
+        print(Titre_conversation)
+        statut_envoi += " | 2"
+        Titre_conversation = Titre_conversation.upper().replace(" ", "").replace("-", "").replace("'", "")
+        statut_envoi += " | 2.1"
+        if((prenom in Titre_conversation) or (nom in Titre_conversation) or (tel in Titre_conversation) or (("N" + num_contact) in Titre_conversation)):
+            statut_envoi += " | contact sélectionné"
+            try:
+                doit_envoyer = True
+                for mot_cle in mots_cles_interdits :
+                    if(chercher_contenu_dans_discussion(mot_cle)):
+                        doit_envoyer = False
+                        statut_envoi += " | le mot-clé interdit '" + mot_cle + "' a été trouvé -> pas d'envoi"
+                        break
+
+                #temps_video = chercher_element("//*[@id='main']/div/div/div/div/div/div/div/div/div/div/span[data-testid='msg-video']/text()", 3)
+                #print("Temps_video = " + str(temps_video))
+
+                if(doit_envoyer):
+                    statut_envoi += " | aucun des mots-clés interdits n'a été trouvé -> envoi"
+                    print(statut_envoi)
+                    return True
+
+            except Exception as e:
+                statut_envoi += " | exception lors de la recherche : " + str(e)
+                print(statut_envoi)
+                return False #En cas de bug, on ne fait rien.
+            return False
+        else:
+            print("Mauvais titre")
+            print(statut_envoi)
+        try:
+            statut_envoi += " | mais mauvais titre : '" + nom + " " + prenom + "' titre conversation : '" + Titre_conversation + "'"
+            print(statut_envoi) 
+            return False
+        except Exception as e:
+            print(str(e))
+
+    except:
+        statut_envoi += " | Contact non trouvé"
+        print(statut_envoi) 
+        return False
+    
+    
+    
+def generer_message(prenom, nom, lycee, ville, annee):
+    if(lycee != ""):
+        lycee = "au lycée " + lycee
+    else : 
+        lycee = "dans ton lycée"
+        
+    message = "Chaque année au Togo, de nombreux étudiants sortent diplômés, mais ne trouvent pas de travail. " + \
+              "À l'IFNTI, ça n'est pas le cas.\n" + \
+              "Ce samedi 21 mai fut une très belle journée. " + \
+              "Les six candidats qui ont soutenu leur stage de fin d'études ont été diplômés. " + \
+              "Comme chaque année, tous les étudiants ont été embauchés dans l'entreprise dans laquelle ils ont fait leur stage. " + \
+              "C'est la preuve que les étudiants qui sortent de l'IFNTI trouvent très facilement du travail, grâce à leurs compétences.\n\n" + \
+              "Félicitations à Amoudiya Sibitti qui a reçu le premier prix informatique féminin : la 'MISS TIC de Sokodé' !\n\n" + \
+              "Cette journée fut également l'occasion pour les étudiants en cours de formation de présenter leurs projets :\n" + \
+              "Projets informatiques :\n" + \
+              " - gestion de stocks (application)\n" + \
+              " - streaming\n" + \
+              " - paiement par Tmoney automatisé\n" + \
+              " - authentification par certificat\n" + \
+              " - gestion de clinique\n" + \
+              " - gestion scolaire\n" + \
+              " - envoi automatique de sms\n" + \
+              "Projets électroniques :\n" + \
+              " - serrure commandée par badge magnétique\n" + \
+              " - drone de type planeur\n" + \
+              " - système d'arrosage automatique\n" + \
+              " - contrôle d'une machine par téléphone\n" + \
+              " - éclairage automatique par détecteur de présence\n" + \
+              " - station météo\n" + \
+              " - imprimante 3D"
+    message = message.format(prenom, nom, lycee, ville)
+        
+    #if(annee == "2020"):
+        #message = "Bonjour {0} {1},\n\n" + \
+        #          "Ce samedi fut une très belle journée ! Les six candidats ont tous été diplômés.\n" + \
+        #          "Par ailleurs, ils ont tous été embauchés dans l'entreprise dans laquelle ils ont fait leur stage. " + \
+        #          "C'est la preuve que les étudiants qui sortent de l'IFNTI trouvent très facilement du travail.\n\n" + \
+        #          "Félicitations à Amoudiya Sibitti qui a reçu le prix MISS TIC de Sokodé !\n\n" + \
+        #          "À bientôt !\n" + \
+        #          "L'IFNTI Sokodé"
+        #"Inscription en ligne : https://forms.gle/wgVHzuGSSbQij73g7"
+        
+        #message = message.format(prenom, nom)
+        
+    #elif(annee == "2021"):
+        #message = "Bonjour {0} {1},\n\n" + \
+        #          "Ce samedi fut une très belle journée ! Les six candidats ont tous été diplômés.\n" + \
+        #          "Par ailleurs, ils ont tous été embauchés dans l'entreprise dans laquelle ils ont fait leur stage. " + \
+        #          "C'est la preuve que les étudiants qui sortent de l'IFNTI trouvent très facilement du travail.\n\n" + \
+        #          "Félicitations à Amoudiya Sibitti qui a reçu le prix MISS TIC de Sokodé !\n\n" + \
+        #          "À bientôt !\n" + \
+        #          "L'IFNTI Sokodé"
+        #message = message.format(prenom, nom, lycee, ville)
+        
+    #elif(annee == "2022"):
+        #message = "Bonjour {0} {1},\n\n" + \
+        #          "Ce samedi fut une très belle journée ! Les six candidats ont tous été diplômés.\n" + \
+        #          "Par ailleurs, ils ont tous été embauchés dans l'entreprise dans laquelle ils ont fait leur stage. " + \
+        #          "C'est la preuve que les étudiants qui sortent de l'IFNTI trouvent très facilement du travail.\n\n" + \
+        #          "Félicitations à Amoudiya Sibitti qui a reçu le prix MISS TIC de Sokodé !\n\n" + \
+        #          "À bientôt !\n" + \
+        #          "L'IFNTI Sokodé"
+        #message = message.format(prenom, nom, lycee, ville)
+    #else:
+    #    print("erreur : étudiant avec année différent de 2020, 2021 ou 2022 : '" + str(annee) +"'")
+    #    message = ""
+    return message
+
+
+statut_envoi = ""
+fichier_etudiants = '/home/jean-christophe/git_IFNTI/Documentations_outils/envoi_whatsapp_supbot/liste_etudiants_interesses.csv'
+fichier_log = '/home/jean-christophe/git_IFNTI/Documentations_outils/envoi_whatsapp_supbot/log_envoi.csv'
+with open(fichier_etudiants, "r") as filin:
+    with open(fichier_log, 'a') as filout:
+        num_contact_envoye = 0
+        for ligne in filin:
+            statut_envoi = ""
+            ligne = ligne.split(",")
+            num_contact = ligne[0].replace("\n", "")
+            ville = ligne[1].replace("\n", "")
+            lycee = ligne[2].replace("\n", "")
+            nom = ligne[3].replace("\n", "")
+            prenom = ligne[4].replace("\n", "")
+            prefixe_tel = ligne[5].replace("\n", "")
+            tel = ligne[6].replace("-", "").replace("\n", "")
+            tel2 = ligne[7].replace("-", "").replace("\n", "")
+            annee = ligne[9].replace("\n", "")
+
+            message = generer_message(prenom, nom, lycee, ville, annee)
+            
+            #piece_jointe = "/home/jean-christophe/git_IFNTI/Administration/Outils_de_com/Videos/Presentation_IFNTI_juin_2021/Presentation_IFNTI_juin_2021_LQ.mp4"
+            piece_jointe = "/home/jean-christophe/Images/vidage_telephone/2022/05-mai/20220521_130250.jpg"
+            #piece_jointe = ""
+            now = datetime.now().strftime("%d/%m/%Y;%H:%M:%S")
+            
+            #Pour ne pas mettre de pièce jointe, simplement mettre une chaine vide
+            for num_tel in {tel, tel2}:
+                if(num_tel != ""):
+                    print(num_tel)
+                    statut_envoi = ""
+                    envoyer_message(num_tel, nom, prenom, message, num_contact, piece_jointe, ["mais ne trouvent pas de travail"])
+                    filout.write(now + ";" + num_contact + ";" + ville + ";" + lycee + ";" + nom + ";" + prenom + ";" + prefixe_tel + ";" + num_tel + ";;;" + annee + ";" + statut_envoi + ";\n")
+                    #Le fichier de Log a été organisé en suivant la structure du fichier liste_etudiants_intéresses.csv, de façon à pouvoir relancer le script sur tous ceux pour qui l'envoi a échoué afin de tenter une deuième fois.
+                    print("\n\n\n")
+filout.close() 
+filin.close()
+print("Terminé.")

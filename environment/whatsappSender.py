@@ -21,9 +21,11 @@ class WhatsappSender:
         self.contactsAEnvoyer = []
         self.contactsEnvoyes = []
         self.statut_envoi = ""
+        self.template = ""
         self.chrome = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
         self.chrome.get("https://web.whatsapp.com") # objet permettant de manipuler la fenêtre chrome grâce à Sélénium.
         self.stopRequired = False #Cette variable sera passée à True lorsque le programme demandera un arrêt prématuré.
+
         print("fin du init de whatsapp sender")
 
     def envoyerTout(self, appli):
@@ -33,13 +35,13 @@ class WhatsappSender:
             for c in self.contactsAEnvoyer[:]:
                 for num_tel in {c.num_tel, c.num_tel2}:
                     if self.stopRequired: # Si le programme principal nous demande de nous arrêter tout de suite.
-                        return
+                        return False
                     if num_tel != "":
                         print(num_tel)
                         self.statut_envoi = ""
                         try:
                             self.selectionner_contact(num_tel, c.nom, c.prenom, c.id)
-                            message0 = self.generer_message(c.prenom, c.nom, c.lycee, c.ville, c.annee)
+                            message0 = self.template.format(**c.asDict())
                             if self.envoyer_message(num_tel, c.nom, c.prenom, message0, self.piece_jointe, []):
                                 self.contactsAEnvoyer.remove(c)
                                 self.contactsEnvoyes.append(c)
@@ -66,45 +68,6 @@ class WhatsappSender:
         except Exception as e:
             traceback.print_exc()
         return len(self.contactsAEnvoyer)
-
-
-    def generer_message(self, prenom, nom, lycee, ville, annee):
-        """Génère le message texte qui composera le message, en le presonalisant avec les informations du contact."""
-        if (lycee != ""):
-            lycee = "au lycée " + lycee
-        else:
-            lycee = "dans ton lycée"
-
-        # message = "Bonjour {0} {1},\n\n" + \
-        #          "J'espère que tout s'e"
-        # message = message.format(prenom, nom, lycee, ville)
-
-        if (annee == "2020"):
-            message = "Bonjour {0} {1},\n\n" + \
-                      "Le premier concours d'entrée à l'IFNTI aura lieu *ce mercredi 29 juin*. Il ne reste que quelques jours pour s'inscrire.\n\n" + \
-                      "Il y aura une autre session après les résultats du BAC. Mais ce sera plus difficile car il restera moins de places disponibles...\n\n" + \
-                      "Cliquer ici pour s'inscrire : *https://forms.gle/9Cvqz7qpobzFgQuN7*"
-
-            message = message.format(prenom, nom)
-
-        elif (annee == "2021"):
-            message = "Bonjour {0} {1},\n\n" + \
-                      "Le premier concours d'entrée à l'IFNTI aura lieu *ce mercredi 29 juin*. Il ne reste que quelques jours pour s'inscrire.\n\n" + \
-                      "Il y aura une autre session après les résultats du BAC. Mais ce sera plus difficile car il restera moins de places disponibles...\n\n" + \
-                      "Cliquer ici pour s'inscrire : *https://forms.gle/9Cvqz7qpobzFgQuN7*"
-            message = message.format(prenom, nom, lycee, ville)
-
-        elif (annee == "2022"):
-            message = "Bonjour {0} {1},\n\n" + \
-                      "J'espère que tout s'est bien passé pour les épreuves du BAC2.\n\n" + \
-                      "Le premier concours d'entrée à l'IFNTI aura lieu *ce mercredi 29 juin*. Il ne reste que quelques jours pour s'inscrire.\n\n" + \
-                      "Il y aura une autre session après les résultats du BAC. Mais ce sera plus difficile car il restera moins de places disponibles...\n\n" + \
-                      "Cliquer ici pour s'inscrire : *https://forms.gle/9Cvqz7qpobzFgQuN7*"
-            message = message.format(prenom, nom, lycee, ville)
-        else:
-            print("erreur : étudiant avec année différent de 2020, 2021 ou 2022 : '" + str(annee) + "'")
-            message = ""
-        return message
 
 
     def selectionner_contact(self, tel: str, nom: str, prenom: str, num_contact: str, mots_cles_interdits=[]):
@@ -146,11 +109,9 @@ class WhatsappSender:
             xpath_contact_non_trouve = '//span[@dir="auto"][@class="i0jNr"][contains(text(),"Aucun contact, discussion ou message trouvé")]'
         except Exception as e:
             print(str(e))
-        print(0)
         try:
             index = -1
             (bouton_contact, index) = self.chercher_elements([xpath_contact_trouve, xpath_contact_non_trouve], 3)
-            print(1)
             if (index == 1):
                 self.statut_envoi += " | Contact officiellement non trouvé"
                 print("contact officiellement non trouvé")
@@ -159,9 +120,6 @@ class WhatsappSender:
                 self.statut_envoi += "échec de la recherche du contact"
                 print("échec de la recherche du contact")
                 raise Exception("échec de la recherche du contact")
-            elif index == 0:
-                trouve = True
-            print(2)
             try:
                 xpath_contact_trouves = [chaine_chemin_contact.format(nom.upper(), prenom.upper()),
                                          chaine_chemin_contact2.format(nom.upper(), prenom.upper()),
@@ -174,7 +132,6 @@ class WhatsappSender:
 
             except Exception as e:
                 print("erreur lors de la recherche des boutons alternatifs : " + str(e))
-            print(3)
             # Il semble que l'élément cliquable ne soit pas le même d'une conversation à l'autre. Je clique donc sur tout ce que je peux en espérant trouver le bon.
             temps_max = 3
             temps = 0
@@ -182,7 +139,6 @@ class WhatsappSender:
 
             prenom = prenom.upper().replace(" ", "").replace("-", "").replace("'", "")
             nom = nom.upper().replace(" ", "").replace("-", "").replace("'", "")
-            print(4)
             while (not (trouve) and (temps < temps_max)):
                 print("dans le while recherche de la conversation")
                 for num_bouton in range(len(bouton_contacts)):
@@ -210,8 +166,6 @@ class WhatsappSender:
                     except Exception as e:
                         print(str(e))
                 temps = temps + 1
-            # print("après le while trouvé = " + str(trouve))
-            print(5)
             search_box.clear()
             self.statut_envoi += " | contact trouvé 0"
 

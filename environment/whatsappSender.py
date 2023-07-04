@@ -4,6 +4,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+import chromedriver_autoinstaller
 
 from Log import logCSV, readCSV, logText
 from contact import Contact
@@ -22,7 +23,17 @@ class WhatsappSender:
         self.contactsEnvoyes = []
         self.statut_envoi = ""
         self.template = ""
-        self.chrome = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+        #options = webdriver.ChromeOptions()
+        #options.add_argument('--ignore-certificate-errors')
+        #options.add_argument("--test-type")
+        #options.binary_location = ChromeDriverManager().install()  # Retrieves the latest ChromeDriver executable path
+        #self.chrome = webdriver.Chrome(chrome_options=options)
+
+        chromedriver_autoinstaller.install()
+        self.chrome = webdriver.Chrome()
+
+        #self.chrome = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
         self.chrome.get("https://web.whatsapp.com") # objet permettant de manipuler la fenêtre chrome grâce à Sélénium.
         self.stopRequired = False #Cette variable sera passée à True lorsque le programme demandera un arrêt prématuré.
 
@@ -53,6 +64,7 @@ class WhatsappSender:
                             # On peut éventuellement ici ajouter un nouvel appel à "envoyer_message" avec un autre texte, ou une autre pièce jointe si on veut envoyer plusieurs messages à chaque contacts.
                             print("\n\n\n")
                         except Exception as e:
+                            traceback.print_exc()
                             print(str(e))
                         d = c.asDict()
                         d.update({"statut_envoi":self.statut_envoi, "num_tel":num_tel})
@@ -274,7 +286,7 @@ class WhatsappSender:
             boutonJoindre.click()
 
             # sélection du fichier à envoyer
-            input_box = self.chrome.find_element(By.tagName('input'))
+            input_box = self.chrome.find_element(By.TAG_NAME, 'input')
             input_box.send_keys(image)
 
             # Attendre que le fichier se charge
